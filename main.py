@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-Gesture PC Controller - Ver 0.3
+Gesture PC Controller - Ver 0.4
 Uses webcam to detect hand gestures for computer control:
 - Navigation gesture: Index and middle fingers extended for left/right navigation
 - Alt+F4 gesture: Open hand followed by closed hand to close the active window
+- Mouse control: Index finger only extended to control mouse cursor
 Supports both left and right hands
 """
 
@@ -15,8 +16,8 @@ import numpy as np
 from camera import select_camera, initialize_camera
 from gestures import (
     mp_hands, mp_drawing, mp_drawing_styles,
-    is_navigation_gesture, is_open_hand, is_closed_hand,
-    process_navigation_gesture, process_alt_f4_gesture,
+    is_navigation_gesture, is_open_hand, is_closed_hand, is_index_finger_only,
+    process_navigation_gesture, process_alt_f4_gesture, process_mouse_control_gesture,
     reset_gesture_states, update_cooldowns
 )
 
@@ -107,6 +108,12 @@ def main():
                     mp_drawing_styles.get_default_hand_connections_style()
                 )
                 
+                # Check for mouse control gesture (index finger only)
+                if is_index_finger_only(hand_landmarks):
+                    process_mouse_control_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                    hand_processed = True
+                    break
+                
                 # Check for navigation gesture (index and middle fingers extended)
                 if is_navigation_gesture(hand_landmarks):
                     process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
@@ -148,7 +155,7 @@ def main():
         cv2.putText(
             image, 
             "Navigation: 2 fingers extended → LEFT/RIGHT", 
-            (10, image_height - 60), 
+            (10, image_height - 90), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.5, 
             (255, 255, 255), 
@@ -158,6 +165,16 @@ def main():
         cv2.putText(
             image, 
             "Close window: Open hand → Closed hand = Alt+F4", 
+            (10, image_height - 60), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
+            (255, 255, 255), 
+            1
+        )
+        
+        cv2.putText(
+            image, 
+            "Mouse control: Index finger only extended", 
             (10, image_height - 30), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.5, 

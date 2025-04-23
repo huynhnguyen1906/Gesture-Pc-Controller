@@ -10,6 +10,7 @@ import time
 import cv2
 import mediapipe as mp
 from pynput.keyboard import Key, Controller, KeyCode
+from pynput.mouse import Button, Controller as MouseController
 
 # Initialize MediaPipe hands module
 mp_hands = mp.solutions.hands
@@ -18,6 +19,9 @@ mp_drawing_styles = mp.solutions.drawing_styles
 
 # Initialize keyboard controller
 keyboard = Controller()
+
+# Initialize mouse controller
+mouse = MouseController()
 
 # MediaPipe hand landmark indices for easy reference
 THUMB_TIP = 4
@@ -35,6 +39,7 @@ WRIST = 0
 class GestureState:
     def __init__(self):
         self.prev_x = None
+        self.prev_y = None
         self.gesture_active = False
         self.movement_threshold = 30  # Minimum X movement to trigger a keystroke
         self.cooldown_counter = 0
@@ -51,10 +56,17 @@ class GestureState:
         self.hand_closed = False
         self.open_hand_confirmed = False
         self.last_hand_state_change_time = 0
+        
+        # For mouse control
+        self.smoothing_factor = 0.5  # 0-1, higher means smoother but slower
+        self.screen_width = 1920  # Default screen resolution, will be updated
+        self.screen_height = 1080  # Default screen resolution, will be updated
+        self.sensitivity_multiplier = 1.5  # Increase sensitivity for mouse movement
 
 # Initialize gesture states
 navigation_gesture_state = GestureState()
 alt_f4_gesture_state = GestureState()
+mouse_gesture_state = GestureState()
 
 def is_navigation_gesture(hand_landmarks):
     """
@@ -128,6 +140,33 @@ def is_closed_hand(hand_landmarks):
     pinky_bent = pinky_tip.y > pinky_pip.y
     
     return index_bent and middle_bent and ring_bent and pinky_bent
+
+def is_index_finger_only(hand_landmarks):
+    """
+    Check if only the index finger is extended while all other fingers are closed
+    """
+    # Get fingertips and knuckles
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    thumb_ip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_IP]
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    index_pip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP]
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    middle_pip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    ring_pip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_PIP]
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+    pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
+    
+    # Check if index finger is extended (tip y < pip y)
+    index_extended = index_tip.y < index_pip.y
+    
+    # Check if other fingers are bent
+    thumb_bent = thumb_tip.y > thumb_ip.y or (thumb_tip.x > thumb_ip.x)  # Different check for thumb
+    middle_bent = middle_tip.y > middle_pip.y
+    ring_bent = ring_tip.y > ring_pip.y
+    pinky_bent = pinky_tip.y > pinky_pip.y
+    
+    return index_extended and thumb_bent and middle_bent and ring_bent and pinky_bent
 
 def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_height):
     """Process navigation gesture (index and middle finger extended) to control left/right keys"""
@@ -392,9 +431,143 @@ def process_alt_f4_gesture(image, hand_landmarks, fps, image_width, image_height
     alt_f4_gesture_state = state
     return image
 
+def process_mouse_control_gesture(image, hand_landmarks, fps, image_width, image_height):
+    """Process index finger only gesture to control the mouse cursor"""
+    global mouse_gesture_state
+    state = mouse_gesture_state
+    
+    # Calculate frames needed for gesture confirmation and cooldown
+    confirmation_frames = int(state.gesture_confirmation_time * fps)
+    
+    # If gesture was confirmed, track movement
+    if state.confirmed_gesture:
+        # Get index finger tip position
+        index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+        
+        # Convert from normalized coordinates to pixel coordinates
+        index_tip_x = index_tip.x * image_width
+        index_tip_y = index_tip.y * image_height
+        
+        # Draw cursor control indicator
+        cv2.circle(image, (int(index_tip_x), int(index_tip_y)), 15, (0, 0, 255), -1)
+        cv2.circle(image, (int(index_tip_x), int(index_tip_y)), 15, (255, 255, 255), 2)
+        
+        # Display active gesture status
+        cv2.putText(
+            image, 
+            "Mouse Control Active", 
+            (10, 390), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.7, 
+            (0, 255, 0), 
+            2
+        )
+        
+        # Only update mouse position if we have previous values
+        if state.prev_x is not None and state.prev_y is not None:
+            # Calculate mouse position with smoothing
+            # Convert finger position from camera coordinates to screen coordinates
+            # Use a mapping where:
+            # - Camera's 20%-80% space maps to the full screen to avoid edges
+            # - Smaller movements in the camera translate to larger movements on screen
+            
+            # Get current mouse position
+            current_mouse_x, current_mouse_y = mouse.position
+            
+            # Map finger position from camera to screen
+            camera_x_min = image_width * 0.2  # 20% from left edge
+            camera_x_max = image_width * 0.8  # 20% from right edge
+            camera_y_min = image_height * 0.2  # 20% from top edge
+            camera_y_max = image_height * 0.8  # 20% from bottom edge
+            
+            # Constrain finger position within camera mapping area
+            constrained_x = max(camera_x_min, min(camera_x_max, index_tip_x))
+            constrained_y = max(camera_y_min, min(camera_y_max, index_tip_y))
+            
+            # Calculate normalized position (0-1 range)
+            normalized_x = (constrained_x - camera_x_min) / (camera_x_max - camera_x_min)
+            normalized_y = (constrained_y - camera_y_min) / (camera_y_max - camera_y_min)
+            
+            # Map to screen coordinates with sensitivity multiplier
+            target_mouse_x = int(normalized_x * state.screen_width * state.sensitivity_multiplier)
+            target_mouse_y = int(normalized_y * state.screen_height * state.sensitivity_multiplier)
+            
+            # Apply smoothing
+            smoothed_x = int(current_mouse_x + (target_mouse_x - current_mouse_x) * (1 - state.smoothing_factor))
+            smoothed_y = int(current_mouse_y + (target_mouse_y - current_mouse_y) * (1 - state.smoothing_factor))
+            
+            # Move mouse to new position
+            mouse.position = (smoothed_x, smoothed_y)
+            
+            # Display mouse coordinates
+            cv2.putText(
+                image, 
+                f"Mouse: ({smoothed_x}, {smoothed_y})", 
+                (10, 430), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (255, 0, 0), 
+                2
+            )
+        
+        # Update previous finger position
+        state.prev_x = index_tip_x
+        state.prev_y = index_tip_y
+        state.gesture_active = True
+        
+    # If gesture is not yet confirmed, increment confirmation counter
+    else:
+        # Increment confirmation counter
+        state.gesture_confirmation_counter += 1
+        
+        # Display confirmation progress
+        confirmation_percent = min(100, int((state.gesture_confirmation_counter / confirmation_frames) * 100))
+        cv2.putText(
+            image, 
+            f"Confirming mouse control gesture: {confirmation_percent}%", 
+            (10, 390), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.7, 
+            (255, 255, 0), 
+            2
+        )
+        
+        # Check if gesture has been held long enough to confirm
+        if state.gesture_confirmation_counter >= confirmation_frames:
+            state.confirmed_gesture = True
+            # Get initial position once gesture is confirmed
+            index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+            state.prev_x = index_tip.x * image_width
+            state.prev_y = index_tip.y * image_height
+            
+            # Get screen resolution (could be done once at startup instead)
+            import screeninfo
+            try:
+                screen = screeninfo.get_monitors()[0]
+                state.screen_width = screen.width
+                state.screen_height = screen.height
+            except:
+                # Fallback to default values if screeninfo is not available
+                state.screen_width = 1920
+                state.screen_height = 1080
+            
+            cv2.putText(
+                image, 
+                "Mouse Control Activated!", 
+                (10, 430), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (0, 255, 0), 
+                2
+            )
+    
+    # Update state
+    mouse_gesture_state = state
+    return image
+
 def reset_gesture_states():
     """Reset all gesture states - call when no hand is detected"""
-    global navigation_gesture_state, alt_f4_gesture_state
+    global navigation_gesture_state, alt_f4_gesture_state, mouse_gesture_state
     
     # Reset navigation gesture
     if navigation_gesture_state.confirmed_gesture:
@@ -409,10 +582,19 @@ def reset_gesture_states():
         alt_f4_gesture_state.open_hand_confirmed = False
     
     alt_f4_gesture_state.gesture_confirmation_counter = 0
+    
+    # Reset mouse control gesture
+    if mouse_gesture_state.confirmed_gesture:
+        mouse_gesture_state.confirmed_gesture = False
+        mouse_gesture_state.prev_x = None
+        mouse_gesture_state.prev_y = None
+    
+    mouse_gesture_state.gesture_confirmation_counter = 0
+    mouse_gesture_state.gesture_active = False
 
 def update_cooldowns(fps):
     """Update cooldown counters"""
-    global navigation_gesture_state, alt_f4_gesture_state
+    global navigation_gesture_state, alt_f4_gesture_state, mouse_gesture_state
     
     # Update navigation gesture cooldowns
     if navigation_gesture_state.cooldown_counter > 0:
@@ -427,3 +609,10 @@ def update_cooldowns(fps):
     
     if alt_f4_gesture_state.gesture_cooldown_counter > 0:
         alt_f4_gesture_state.gesture_cooldown_counter -= 1
+    
+    # Update mouse control gesture cooldowns
+    if mouse_gesture_state.cooldown_counter > 0:
+        mouse_gesture_state.cooldown_counter -= 1
+    
+    if mouse_gesture_state.gesture_cooldown_counter > 0:
+        mouse_gesture_state.gesture_cooldown_counter -= 1
