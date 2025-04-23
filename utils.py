@@ -5,7 +5,7 @@
 Utility functions for Gesture PC Controller
 """
 
-import cv2python main.pypython main.py
+import cv2
 import numpy as np
 import mediapipe as mp
 
@@ -20,6 +20,20 @@ RING_FINGER_PIP = 14
 PINKY_TIP = 20
 PINKY_PIP = 18
 WRIST = 0
+
+# Variables for tracking movement and gesture confirmation
+prev_x = None
+gesture_active = False
+movement_threshold = 30  # Minimum X movement to trigger a keystroke
+cooldown_counter = 0
+cooldown_frames = 10  # Wait this many frames after a key press
+
+gesture_confirmation_time = 0.1  # Seconds to confirm gesture before tracking
+gesture_confirmation_counter = 0
+gesture_cooldown_time = 0.15  # Seconds between gesture detections
+gesture_cooldown_counter = 0
+last_gesture_time = 0
+confirmed_gesture = False
 
 def calculate_distance(point1, point2):
     """Calculate Euclidean distance between two points"""
