@@ -2,23 +2,31 @@
 # -*- coding: utf-8 -*-
 
 """
-Gesture PC Controller - Ver 0.4
+Gesture PC Controller - Ver 0.5
 Uses webcam to detect hand gestures for computer control:
 - Navigation gesture: Index and middle fingers extended for left/right navigation
 - Alt+F4 gesture: Open hand followed by closed hand to close the active window
 - Mouse control: Index finger only extended to control mouse cursor
-Supports both left and right hands
+- Mouse click: OK gesture (thumb and index finger form a circle) to left click
+- Scroll: Thumb and index finger in V/L shape for vertical scrolling
+Supports both left and right hands and simultaneous dual-hand gestures
 """
 
 import cv2
-import mediapipe as mp
 import numpy as np
 from camera import select_camera, initialize_camera
+
+# Import from config
+from config import (
+    mp_hands, mp_drawing, mp_drawing_styles
+)
+
+# Import from gesture package
 from gestures import (
-    mp_hands, mp_drawing, mp_drawing_styles,
-    is_navigation_gesture, is_open_hand, is_closed_hand, is_index_finger_only,
-    process_navigation_gesture, process_alt_f4_gesture, process_mouse_control_gesture,
-    reset_gesture_states, update_cooldowns
+    is_navigation_gesture, is_open_hand, is_closed_hand, is_index_finger_only, is_ok_gesture,
+    is_scroll_gesture, process_navigation_gesture, process_alt_f4_gesture, 
+    process_mouse_control_gesture, process_mouse_click_gesture, process_scroll_gesture,
+    gesture_states, update_all_cooldowns, reset_all_gesture_states
 )
 
 def main():
@@ -92,13 +100,62 @@ def main():
         )
         
         # Update cooldowns regardless of whether a hand is detected
-        update_cooldowns(actual_fps)
+        update_all_cooldowns(gesture_states, actual_fps)
         
         # Process hand landmarks if detected
         if results.multi_hand_landmarks:
-            hand_processed = False
+            # Keep track of whether specific gestures have been recognized
+            mouse_control_active = False
+            mouse_click_active = False
+            navigation_active = False
+            alt_f4_active = False
+            scroll_active = False  # New flag for scroll gesture
             
+            # First loop: Process mouse control gesture only (primary hand)
             for hand_landmarks in results.multi_hand_landmarks:
+                # Check for mouse control gesture (index finger only)
+                if is_index_finger_only(hand_landmarks):
+                    process_mouse_control_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                    mouse_control_active = True
+                    break  # Once mouse control is found, exit this loop
+            
+            # Second loop: Only process click gesture if mouse control is active
+            if mouse_control_active and len(results.multi_hand_landmarks) > 1:
+                # Process the other hands for potential click gesture
+                for hand_landmarks in results.multi_hand_landmarks:
+                    # Skip if this is the hand already being used for mouse control
+                    if is_index_finger_only(hand_landmarks):
+                        continue
+                    
+                    # Check for OK gesture for mouse click
+                    if is_ok_gesture(hand_landmarks):
+                        process_mouse_click_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                        mouse_click_active = True
+                        break
+            
+            # Third loop: Process other gestures if mouse control is not active
+            if not mouse_control_active:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    # Check for scroll gesture (L/V shape with thumb and index)
+                    if is_scroll_gesture(hand_landmarks):
+                        process_scroll_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                        scroll_active = True
+                        break
+                    
+                    # Check for navigation gesture (index and middle fingers extended)
+                    if not scroll_active and is_navigation_gesture(hand_landmarks):
+                        process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                        navigation_active = True
+                        break
+                    
+                    # Check for Alt+F4 gesture (open hand to closed hand)
+                    if not (scroll_active or navigation_active) and (is_open_hand(hand_landmarks) or is_closed_hand(hand_landmarks)):
+                        process_alt_f4_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                        alt_f4_active = True
+                        break
+            
+            # Process each hand separately to add labels
+            for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
                 # Draw hand landmarks on the image
                 mp_drawing.draw_landmarks(
                     image,
@@ -108,26 +165,26 @@ def main():
                     mp_drawing_styles.get_default_hand_connections_style()
                 )
                 
-                # Check for mouse control gesture (index finger only)
-                if is_index_finger_only(hand_landmarks):
-                    process_mouse_control_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                    hand_processed = True
-                    break
-                
-                # Check for navigation gesture (index and middle fingers extended)
-                if is_navigation_gesture(hand_landmarks):
-                    process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                    hand_processed = True
-                    break
-                
-                # Check for Alt+F4 gesture (open hand to closed hand)
-                if is_open_hand(hand_landmarks) or is_closed_hand(hand_landmarks):
-                    process_alt_f4_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                    hand_processed = True
-                    break
+                # Add hand number to display
+                hand_text = f"Hand {i+1}"
+                wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+                wrist_x = int(wrist.x * image_width)
+                wrist_y = int(wrist.y * image_height)
+                cv2.putText(
+                    image,
+                    hand_text,
+                    (wrist_x, wrist_y - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 255, 0),
+                    1
+                )
             
             # If no recognizable gesture was found
-            if not hand_processed:
+            if not (mouse_control_active or navigation_active or alt_f4_active or mouse_click_active or scroll_active):
+                # Reset all gesture states when no valid gesture is detected
+                reset_all_gesture_states(gesture_states)
+                
                 cv2.putText(
                     image, 
                     "No valid gesture detected", 
@@ -139,7 +196,7 @@ def main():
                 )
         else:
             # No hands detected, reset all gesture states
-            reset_gesture_states()
+            reset_all_gesture_states(gesture_states)
             
             cv2.putText(
                 image, 
@@ -155,7 +212,7 @@ def main():
         cv2.putText(
             image, 
             "Navigation: 2 fingers extended → LEFT/RIGHT", 
-            (10, image_height - 90), 
+            (10, image_height - 150), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.5, 
             (255, 255, 255), 
@@ -165,7 +222,7 @@ def main():
         cv2.putText(
             image, 
             "Close window: Open hand → Closed hand = Alt+F4", 
-            (10, image_height - 60), 
+            (10, image_height - 120), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.5, 
             (255, 255, 255), 
@@ -175,6 +232,27 @@ def main():
         cv2.putText(
             image, 
             "Mouse control: Index finger only extended", 
+            (10, image_height - 90), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
+            (255, 255, 255), 
+            1
+        )
+        
+        cv2.putText(
+            image, 
+            "Mouse click (with 2nd hand): OK gesture while controlling mouse", 
+            (10, image_height - 60), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
+            (255, 255, 255), 
+            1
+        )
+        
+        # New instruction for scroll gesture
+        cv2.putText(
+            image, 
+            "Scroll: Thumb + Index in L/V shape → VERTICAL scroll from reference point", 
             (10, image_height - 30), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.5, 
