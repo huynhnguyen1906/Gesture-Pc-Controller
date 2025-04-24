@@ -92,6 +92,7 @@ def is_scroll_gesture(hand_landmarks):
     - Other three fingers bent
     
     This is similar to an "L" shape with thumb and index finger
+    Slightly relaxed condition for angle acceptance
     """
     # Get fingertips and knuckles
     thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
@@ -141,7 +142,8 @@ def is_scroll_gesture(hand_landmarks):
     angle = np.arccos(dot_product) * 180 / np.pi
     
     # V or L shape typically has angle around 45-90+ degrees
-    proper_v_shape = angle > 30 and angle < 110
+    # Only keep the expanded angle range (20-120 degrees instead of 30-110)
+    proper_v_shape = angle > 20 and angle < 120
     
     # Ensure there's sufficient separation between thumb and index finger
     thumb_index_distance = np.sqrt(
@@ -204,8 +206,7 @@ def is_closed_hand(hand_landmarks):
 def is_index_finger_only(hand_landmarks):
     """
     Check if only the index finger is extended while all other fingers are closed.
-    This version is more strict and ensures other fingers are actually bent.
-    Additionally, thumb must touch other bent fingers to form a proper pointer gesture.
+    This version has been slightly relaxed to make it easier to perform the gesture.
     """
     # Get landmarks for all fingers and wrist
     wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
@@ -248,41 +249,40 @@ def is_index_finger_only(hand_landmarks):
     dist_pinky_tip_to_wrist = np.sqrt((pinky_tip.x - wrist.x)**2 + (pinky_tip.y - wrist.y)**2)
     dist_pinky_pip_to_wrist = np.sqrt((pinky_pip.x - wrist.x)**2 + (pinky_pip.y - wrist.y)**2)
     
-    # Check if index finger is extended
-    index_extended = dist_index_tip_to_wrist > dist_index_pip_to_wrist
+    # Check if index finger is extended - slightly relaxed condition
+    index_extended = dist_index_tip_to_wrist > dist_index_pip_to_wrist * 0.9
     
-    # Check if other fingers are bent (more strict conditions)
+    # Check if other fingers are bent
     middle_bent = dist_middle_tip_to_wrist < dist_middle_pip_to_wrist
     ring_bent = dist_ring_tip_to_wrist < dist_ring_pip_to_wrist
     pinky_bent = dist_pinky_tip_to_wrist < dist_pinky_pip_to_wrist
     
     # Calculate distances from thumb tip to other finger tips and bases
-    # This is crucial for checking if thumb is touching the bent fingers
     thumb_to_middle_tip = np.sqrt((thumb_tip.x - middle_tip.x)**2 + (thumb_tip.y - middle_tip.y)**2)
     thumb_to_ring_tip = np.sqrt((thumb_tip.x - ring_tip.x)**2 + (thumb_tip.y - ring_tip.y)**2)
     thumb_to_pinky_tip = np.sqrt((thumb_tip.x - pinky_tip.x)**2 + (thumb_tip.y - pinky_tip.y)**2)
     
-    # Check if thumb is close to any of the bent fingers (should be touching at least one)
-    # Threshold for "touching" - may need adjustment based on testing
+    # Check if thumb is close to any of the bent fingers
     touch_threshold = 0.05
     thumb_touching_bent_fingers = (
         thumb_to_middle_tip < touch_threshold or
         thumb_to_ring_tip < touch_threshold or
-        thumb_to_pinky_tip < touch_threshold
+        thumb_to_pinky_tip < touch_threshold or
+        # Allow thumb to be positioned near the palm
+        (thumb_tip.x > index_mcp.x - 0.05)  # For right-handed users, thumb is inside the palm
     )
     
-    # Secondary condition: index fingertip's y coordinate should be significantly higher than others
+    # Secondary condition: index fingertip's y coordinate should be higher than others
     index_is_highest = (
-        index_tip.y < middle_tip.y - 0.05 and
-        index_tip.y < ring_tip.y - 0.05 and
-        index_tip.y < pinky_tip.y - 0.05
+        index_tip.y < middle_tip.y - 0.05 and  # Restored to original 0.05
+        index_tip.y < ring_tip.y - 0.05 and    # Restored to original 0.05
+        index_tip.y < pinky_tip.y - 0.05       # Restored to original 0.05
     )
     
-    # Final check: middle is really bent by checking it's not sticking out
+    # Final check: middle is bent
     middle_really_bent = middle_tip.y > middle_pip.y * 0.95
     
-    # All conditions must be met: index extended, other fingers bent,
-    # AND thumb must be touching at least one of the bent fingers
+    # All conditions must be met
     return (index_extended and 
             middle_bent and ring_bent and pinky_bent and 
             thumb_touching_bent_fingers and 
