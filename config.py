@@ -33,7 +33,7 @@ PINKY_PIP = 18
 WRIST = 0
 
 # Gesture timing configuration
-GESTURE_CONFIRMATION_TIME = 0.35  # Seconds to confirm gesture before tracking (increased from 0.1)
-GESTURE_COOLDOWN_TIME = 0.15  # Seconds between gesture detections
+GESTURE_CONFIRMATION_TIME = 0.5  # Seconds to confirm gesture before tracking (increased from 0.1)
+GESTURE_COOLDOWN_TIME = 0.5  # Seconds between gesture detections (increased from 0.15)
 MOVEMENT_THRESHOLD = 30  # Minimum X movement to trigger a keystroke
 COOLDOWN_FRAMES = 10  # Wait this many frames after a key press
