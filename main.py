@@ -2,10 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-Gesture PC Controller - Ver 0.5
+Gesture PC Controller - Ver 0.6
 Uses webcam to detect hand gestures for computer control:
 - Navigation gesture: Index and middle fingers extended for left/right navigation
-- Alt+F4 gesture: Open hand followed by closed hand to close the active window
 - Mouse control: Index finger only extended to control mouse cursor
 - Mouse click: OK gesture (thumb and index finger form a circle) to left click
 - Scroll: Thumb and index finger in V/L shape for vertical scrolling
@@ -23,8 +22,8 @@ from config import (
 
 # Import from gesture package
 from gestures import (
-    is_navigation_gesture, is_open_hand, is_closed_hand, is_index_finger_only, is_ok_gesture,
-    is_scroll_gesture, process_navigation_gesture, process_alt_f4_gesture, 
+    is_navigation_gesture, is_index_finger_only, is_ok_gesture,
+    is_scroll_gesture, process_navigation_gesture, 
     process_mouse_control_gesture, process_mouse_click_gesture, process_scroll_gesture,
     gesture_states, update_all_cooldowns, reset_all_gesture_states
 )
@@ -103,12 +102,10 @@ def main():
         update_all_cooldowns(gesture_states, actual_fps)
         
         # Process hand landmarks if detected
-        if results.multi_hand_landmarks:
-            # Keep track of whether specific gestures have been recognized
+        if results.multi_hand_landmarks:            # Keep track of whether specific gestures have been recognized
             mouse_control_active = False
             mouse_click_active = False
             navigation_active = False
-            alt_f4_active = False
             scroll_active = False  # New flag for scroll gesture
             
             # First loop: Process mouse control gesture only (primary hand)
@@ -147,12 +144,8 @@ def main():
                         process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
                         navigation_active = True
                         break
-                    
-                    # Check for Alt+F4 gesture (open hand to closed hand)
-                    if not (scroll_active or navigation_active) and (is_open_hand(hand_landmarks) or is_closed_hand(hand_landmarks)):
-                        process_alt_f4_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                        alt_f4_active = True
-                        break
+                      # Alt+F4 gesture functionality has been removed
+                    # This keeps the code structure while disabling the alt+f4 functionality
             
             # Process each hand separately to add labels
             for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
@@ -179,9 +172,8 @@ def main():
                     (255, 255, 0),
                     1
                 )
-            
-            # If no recognizable gesture was found
-            if not (mouse_control_active or navigation_active or alt_f4_active or mouse_click_active or scroll_active):
+              # If no recognizable gesture was found
+            if not (mouse_control_active or navigation_active or mouse_click_active or scroll_active):
                 # Reset all gesture states when no valid gesture is detected
                 reset_all_gesture_states(gesture_states)
                 
@@ -218,16 +210,7 @@ def main():
             (255, 255, 255), 
             1
         )
-        
-        cv2.putText(
-            image, 
-            "Close window: Open hand → Closed hand = Alt+F4", 
-            (10, image_height - 120), 
-            cv2.FONT_HERSHEY_SIMPLEX, 
-            0.5, 
-            (255, 255, 255), 
-            1
-        )
+          # Alt+F4 instruction removed
         
         cv2.putText(
             image, 

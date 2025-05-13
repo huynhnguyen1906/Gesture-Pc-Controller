@@ -158,45 +158,19 @@ def is_scroll_gesture(hand_landmarks):
 
 def is_open_hand(hand_landmarks):
     """
-    Check if all five fingers are extended (open hand)
+    This function has been disabled - Alt+F4 gesture feature was removed
+    Always returns False
     """
-    # Get fingertips and knuckles
-    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
-    thumb_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_MCP]
-    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-    index_pip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP]
-    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
-    middle_pip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
-    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
-    ring_pip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_PIP]
-    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
-    pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
-    
-    # Check if all fingers are extended
-    thumb_extended = thumb_tip.x < thumb_mcp.x  # For right hand
-    index_extended = index_tip.y < index_pip.y
-    middle_extended = middle_tip.y < middle_pip.y
-    ring_extended = ring_tip.y < ring_pip.y
-    pinky_extended = pinky_tip.y < pinky_pip.y
-    
-    return thumb_extended and index_extended and middle_extended and ring_extended and pinky_extended
+    # Feature disabled
+    return False
 
 def is_closed_hand(hand_landmarks):
     """
-    Check if hand is closed (fist)
+    This function has been disabled - Alt+F4 gesture feature was removed
+    Always returns False
     """
-    # Get fingertips and knuckles
-    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-    index_pip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP]
-    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
-    middle_pip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
-    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
-    ring_pip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_PIP]
-    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
-    pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
-    
-    # Check if all fingers are bent (tip y > pip y)
-    index_bent = index_tip.y > index_pip.y
+    # Feature disabled
+    return False
     middle_bent = middle_tip.y > middle_pip.y
     ring_bent = ring_tip.y > ring_pip.y
     pinky_bent = pinky_tip.y > pinky_pip.y

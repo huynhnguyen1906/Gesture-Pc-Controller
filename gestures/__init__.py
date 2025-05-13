@@ -9,8 +9,6 @@ Gesture detection package for PC Controller
 from gestures.base import (
     GestureState,
     is_navigation_gesture,
-    is_open_hand,
-    is_closed_hand,
     is_index_finger_only,
     is_ok_gesture,
     is_scroll_gesture,  # Add the new scroll gesture detection
@@ -58,8 +56,6 @@ gesture_states = {
 # All available gesture check functions
 gesture_checks = {
     'navigation': is_navigation_gesture,
-    'alt_f4_open': is_open_hand,
-    'alt_f4_close': is_closed_hand,
     'mouse': is_index_finger_only,
     'mouse_click': is_ok_gesture,
     'scroll': is_scroll_gesture  # Add the new scroll gesture check
