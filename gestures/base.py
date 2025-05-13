@@ -8,8 +8,15 @@ Base classes and functions for gesture detection
 import time
 import cv2
 import numpy as np
-from config import mp_hands, THUMB_TIP, INDEX_FINGER_TIP, INDEX_FINGER_PIP, MIDDLE_FINGER_TIP
-from config import MIDDLE_FINGER_PIP, RING_FINGER_TIP, RING_FINGER_PIP, PINKY_TIP, PINKY_PIP, WRIST
+from config import (
+    mp_hands,
+    THUMB_TIP, INDEX_FINGER_TIP, INDEX_FINGER_PIP, MIDDLE_FINGER_TIP,
+    MIDDLE_FINGER_PIP, RING_FINGER_TIP, RING_FINGER_PIP, PINKY_TIP, PINKY_PIP, WRIST,
+    DEFAULT_MOVEMENT_THRESHOLD, DEFAULT_GESTURE_CONFIRMATION_TIME,
+    DEFAULT_GESTURE_COOLDOWN_TIME, DEFAULT_COOLDOWN_FRAMES,
+    DEFAULT_SMOOTHING_FACTOR, DEFAULT_SENSITIVITY_MULTIPLIER,
+    DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT
+)
 
 class GestureState:
     """Base class for tracking gesture state"""
@@ -17,45 +24,44 @@ class GestureState:
         self.prev_x = None
         self.prev_y = None
         self.gesture_active = False
-        self.movement_threshold = 30  # Minimum X movement to trigger a keystroke
+
+        self.movement_threshold = DEFAULT_MOVEMENT_THRESHOLD
         self.cooldown_counter = 0
-        self.cooldown_frames = 10  # Wait this many frames after a key press
-        
-        self.gesture_confirmation_time = 0.1  # Seconds to confirm gesture before tracking
+        self.cooldown_frames = DEFAULT_COOLDOWN_FRAMES
+
+        self.gesture_confirmation_time = DEFAULT_GESTURE_CONFIRMATION_TIME
         self.gesture_confirmation_counter = 0
-        self.gesture_cooldown_time = 0.15  # Seconds between gesture detections
+        self.gesture_cooldown_time = DEFAULT_GESTURE_COOLDOWN_TIME
         self.gesture_cooldown_counter = 0
         self.confirmed_gesture = False
-        
+
         # For open-close hand gesture
         self.hand_open = False
         self.hand_closed = False
         self.open_hand_confirmed = False
         self.last_hand_state_change_time = 0
-        
+
         # For mouse control
-        self.smoothing_factor = 0.5  # 0-1, higher means smoother but slower
-        self.screen_width = 1920  # Default screen resolution, will be updated
-        self.screen_height = 1080  # Default screen resolution, will be updated
-        self.sensitivity_multiplier = 1.5  # Increase sensitivity for mouse movement
-        
+        self.smoothing_factor = DEFAULT_SMOOTHING_FACTOR
+        self.screen_width = DEFAULT_SCREEN_WIDTH
+        self.screen_height = DEFAULT_SCREEN_HEIGHT
+        self.sensitivity_multiplier = DEFAULT_SENSITIVITY_MULTIPLIER
+
         # For scroll gesture
-        self.scroll_orientation = None  # Can be 'vertical' or 'horizontal'
-        
+        self.scroll_orientation = None
+
     def reset(self):
-        """Reset the gesture state"""
         self.gesture_active = False
         self.confirmed_gesture = False
         self.gesture_confirmation_counter = 0
         self.prev_x = None
         self.prev_y = None
         self.scroll_orientation = None
-        
+
     def update_cooldown(self):
-        """Update cooldown counters"""
         if self.cooldown_counter > 0:
             self.cooldown_counter -= 1
-            
+
         if self.gesture_cooldown_counter > 0:
             self.gesture_cooldown_counter -= 1
 

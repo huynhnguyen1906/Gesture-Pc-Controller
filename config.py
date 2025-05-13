@@ -32,8 +32,28 @@ PINKY_TIP = 20
 PINKY_PIP = 18
 WRIST = 0
 
-# Gesture timing configuration
-GESTURE_CONFIRMATION_TIME = 0.5  # Seconds to confirm gesture before tracking (increased from 0.1)
-GESTURE_COOLDOWN_TIME = 0.5  # Seconds between gesture detections (increased from 0.15)
-MOVEMENT_THRESHOLD = 30  # Minimum X movement to trigger a keystroke
-COOLDOWN_FRAMES = 10  # Wait this many frames after a key press
+# --- Gesture behavior configuration ---
+
+# Minimum X movement to trigger a keystroke
+DEFAULT_MOVEMENT_THRESHOLD = 20
+
+# Seconds to confirm gesture before tracking
+DEFAULT_GESTURE_CONFIRMATION_TIME = 0.5
+
+# Seconds between gesture detections
+DEFAULT_GESTURE_COOLDOWN_TIME = 0.2
+
+# Wait this many frames after a key press
+DEFAULT_COOLDOWN_FRAMES = 10
+
+# --- Mouse control settings ---
+
+# Smoothing factor for mouse movement (0-1, higher means smoother but slower)
+DEFAULT_SMOOTHING_FACTOR = 0.5
+
+# Increase sensitivity for mouse movement
+DEFAULT_SENSITIVITY_MULTIPLIER = 1.5
+
+# Default screen resolution, will be updated
+DEFAULT_SCREEN_WIDTH = 1920
+DEFAULT_SCREEN_HEIGHT = 1080
