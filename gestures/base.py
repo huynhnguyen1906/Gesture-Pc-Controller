@@ -12,7 +12,7 @@ from config import (
     mp_hands,
     THUMB_TIP, INDEX_FINGER_TIP, INDEX_FINGER_PIP, MIDDLE_FINGER_TIP,
     MIDDLE_FINGER_PIP, RING_FINGER_TIP, RING_FINGER_PIP, PINKY_TIP, PINKY_PIP, WRIST,
-    DEFAULT_MOVEMENT_THRESHOLD, DEFAULT_GESTURE_CONFIRMATION_TIME,
+    DEFAULT_MOVEMENT_THRESHOLD, DEFAULT_Y_MOVEMENT_THRESHOLD, DEFAULT_GESTURE_CONFIRMATION_TIME,
     DEFAULT_GESTURE_COOLDOWN_TIME, DEFAULT_COOLDOWN_FRAMES,
     DEFAULT_SMOOTHING_FACTOR, DEFAULT_SENSITIVITY_MULTIPLIER,
     DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT
@@ -39,9 +39,7 @@ class GestureState:
         self.hand_open = False
         self.hand_closed = False
         self.open_hand_confirmed = False
-        self.last_hand_state_change_time = 0
-
-        # For mouse control
+        self.last_hand_state_change_time = 0        # For mouse control
         self.smoothing_factor = DEFAULT_SMOOTHING_FACTOR
         self.screen_width = DEFAULT_SCREEN_WIDTH
         self.screen_height = DEFAULT_SCREEN_HEIGHT
@@ -49,6 +47,12 @@ class GestureState:
 
         # For scroll gesture
         self.scroll_orientation = None
+        
+        # For Alt+Tab gesture
+        self.is_alt_pressed = False  # Whether Alt key is being held
+        self.alt_tab_activated = False  # Whether Alt+Tab was activated
+        self.y_movement_threshold = DEFAULT_Y_MOVEMENT_THRESHOLD  # Minimum Y movement to trigger Alt+Tab
+
 
     def reset(self):
         self.gesture_active = False
@@ -164,11 +168,65 @@ def is_scroll_gesture(hand_landmarks):
 
 def is_open_hand(hand_landmarks):
     """
-    This function has been disabled - Alt+F4 gesture feature was removed
-    Always returns False
+    Check if the hand is making an open hand gesture:
+    - All five fingers are extended
     """
-    # Feature disabled
-    return False
+    # Get fingertips and PIPs (Proximal Interphalangeal Joint)
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    thumb_ip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_IP]
+    thumb_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_MCP]
+    
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    index_pip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP]
+    
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    middle_pip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
+    
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    ring_pip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_PIP]
+    
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+    pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
+    
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+    
+    # Calculate distances from fingertips to wrist
+    dist_thumb_tip_to_wrist = np.sqrt((thumb_tip.x - wrist.x)**2 + (thumb_tip.y - wrist.y)**2)
+    dist_thumb_ip_to_wrist = np.sqrt((thumb_ip.x - wrist.x)**2 + (thumb_tip.y - wrist.y)**2)
+    
+    dist_index_tip_to_wrist = np.sqrt((index_tip.x - wrist.x)**2 + (index_tip.y - wrist.y)**2)
+    dist_index_pip_to_wrist = np.sqrt((index_pip.x - wrist.x)**2 + (index_pip.y - wrist.y)**2)
+    
+    dist_middle_tip_to_wrist = np.sqrt((middle_tip.x - wrist.x)**2 + (middle_tip.y - wrist.y)**2)
+    dist_middle_pip_to_wrist = np.sqrt((middle_pip.x - wrist.x)**2 + (middle_pip.y - wrist.y)**2)
+    
+    dist_ring_tip_to_wrist = np.sqrt((ring_tip.x - wrist.x)**2 + (ring_tip.y - wrist.y)**2)
+    dist_ring_pip_to_wrist = np.sqrt((ring_pip.x - wrist.x)**2 + (ring_pip.y - wrist.y)**2)
+    
+    dist_pinky_tip_to_wrist = np.sqrt((pinky_tip.x - wrist.x)**2 + (pinky_tip.y - wrist.y)**2)
+    dist_pinky_pip_to_wrist = np.sqrt((pinky_pip.x - wrist.x)**2 + (pinky_pip.y - wrist.y)**2)
+    
+    # Check if all fingers are extended
+    thumb_extended = dist_thumb_tip_to_wrist > dist_thumb_ip_to_wrist
+    index_extended = dist_index_tip_to_wrist > dist_index_pip_to_wrist
+    middle_extended = dist_middle_tip_to_wrist > dist_middle_pip_to_wrist
+    ring_extended = dist_ring_tip_to_wrist > dist_ring_pip_to_wrist
+    pinky_extended = dist_pinky_tip_to_wrist > dist_pinky_pip_to_wrist
+    
+    # Also check using y-coordinate comparison
+    index_extended_y = index_tip.y < index_pip.y
+    middle_extended_y = middle_tip.y < middle_pip.y
+    ring_extended_y = ring_tip.y < ring_pip.y
+    pinky_extended_y = pinky_tip.y < pinky_pip.y
+    
+    # Combine the checks
+    index_is_extended = index_extended and index_extended_y
+    middle_is_extended = middle_extended and middle_extended_y
+    ring_is_extended = ring_extended and ring_extended_y
+    pinky_is_extended = pinky_extended and pinky_extended_y
+    
+    # All fingers must be extended
+    return thumb_extended and index_is_extended and middle_is_extended and ring_is_extended and pinky_is_extended
 
 def is_closed_hand(hand_landmarks):
     """
@@ -324,6 +382,68 @@ def is_ok_gesture(hand_landmarks):
         (ring_extended and ring_dist_extended) and 
         (pinky_extended and pinky_dist_extended)
     )
+    
+    return thumb_index_circle and other_fingers_extended
+
+def is_alt_tab_ok_gesture(hand_landmarks):
+    """
+    Check if the hand is making an "OK" gesture for Alt+Tab functionality
+    This version is more relaxed than the standard OK gesture:
+    - Index finger and thumb form a circle (tips are somewhat close to each other)
+    - Only need 2 of 3 other fingers extended
+    """
+    # Get finger landmarks
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    index_pip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP]
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    middle_pip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    ring_pip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_PIP]
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+    pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+    
+    # Check if index finger and thumb are forming a circle (tips close to each other)
+    # Calculate the distance between index finger tip and thumb tip
+    thumb_index_distance = np.sqrt(
+        (thumb_tip.x - index_tip.x) ** 2 + 
+        (thumb_tip.y - index_tip.y) ** 2 + 
+        (thumb_tip.z - index_tip.z) ** 2
+    )
+    
+    # More relaxed distance threshold for Alt+Tab OK gesture
+    touching_threshold = 0.1  # Increased from 0.05 to 0.1
+    
+    # Check if middle, ring, and pinky fingers are extended
+    # Use a combination of y-coordinate comparison and distance calculation
+    middle_extended = middle_tip.y < middle_pip.y * 1.05  # More relaxed condition
+    ring_extended = ring_tip.y < ring_pip.y * 1.05  # More relaxed condition
+    pinky_extended = pinky_tip.y < pinky_pip.y * 1.05  # More relaxed condition
+    
+    # Additional checks for finger extension using distance
+    dist_middle_tip_to_wrist = np.sqrt((middle_tip.x - wrist.x)**2 + (middle_tip.y - wrist.y)**2)
+    dist_middle_pip_to_wrist = np.sqrt((middle_pip.x - wrist.x)**2 + (middle_pip.y - wrist.y)**2)
+    dist_ring_tip_to_wrist = np.sqrt((ring_tip.x - wrist.x)**2 + (ring_tip.y - wrist.y)**2)
+    dist_ring_pip_to_wrist = np.sqrt((ring_pip.x - wrist.x)**2 + (ring_pip.y - wrist.y)**2)
+    dist_pinky_tip_to_wrist = np.sqrt((pinky_tip.x - wrist.x)**2 + (pinky_tip.y - wrist.y)**2)
+    dist_pinky_pip_to_wrist = np.sqrt((pinky_pip.x - wrist.x)**2 + (pinky_pip.y - wrist.y)**2)
+    
+    middle_dist_extended = dist_middle_tip_to_wrist > dist_middle_pip_to_wrist * 0.9  # More relaxed
+    ring_dist_extended = dist_ring_tip_to_wrist > dist_ring_pip_to_wrist * 0.9  # More relaxed
+    pinky_dist_extended = dist_pinky_tip_to_wrist > dist_pinky_pip_to_wrist * 0.9  # More relaxed
+    
+    # Final determination with more relaxed conditions
+    thumb_index_circle = thumb_index_distance < touching_threshold
+    
+    # Only 2 out of 3 fingers need to be extended (more relaxed)
+    middle_extended_final = middle_extended or middle_dist_extended
+    ring_extended_final = ring_extended or ring_dist_extended
+    pinky_extended_final = pinky_extended or pinky_dist_extended
+    
+    # Count extended fingers
+    extended_count = sum([middle_extended_final, ring_extended_final, pinky_extended_final])
+    other_fingers_extended = extended_count >= 2  # Only need 2 out of 3 fingers extended
     
     return thumb_index_circle and other_fingers_extended
 

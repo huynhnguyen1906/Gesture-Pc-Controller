@@ -37,11 +37,14 @@ WRIST = 0
 # Minimum X movement to trigger a keystroke
 DEFAULT_MOVEMENT_THRESHOLD = 20
 
+# Minimum Y movement for Alt+Tab gesture
+DEFAULT_Y_MOVEMENT_THRESHOLD = 20
+
 # Seconds to confirm gesture before tracking
-DEFAULT_GESTURE_CONFIRMATION_TIME = 0.5
+DEFAULT_GESTURE_CONFIRMATION_TIME = 0.3
 
 # Seconds between gesture detections
-DEFAULT_GESTURE_COOLDOWN_TIME = 0.2
+DEFAULT_GESTURE_COOLDOWN_TIME = 0.3
 
 # Wait this many frames after a key press
 DEFAULT_COOLDOWN_FRAMES = 10
@@ -49,10 +52,10 @@ DEFAULT_COOLDOWN_FRAMES = 10
 # --- Mouse control settings ---
 
 # Smoothing factor for mouse movement (0-1, higher means smoother but slower)
-DEFAULT_SMOOTHING_FACTOR = 0.5
+DEFAULT_SMOOTHING_FACTOR = 0.7
 
 # Increase sensitivity for mouse movement
-DEFAULT_SENSITIVITY_MULTIPLIER = 1.5
+DEFAULT_SENSITIVITY_MULTIPLIER = 1.1
 
 # Default screen resolution, will be updated
 DEFAULT_SCREEN_WIDTH = 1920

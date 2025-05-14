@@ -22,10 +22,10 @@ from config import (
 
 # Import from gesture package
 from gestures import (
-    is_navigation_gesture, is_index_finger_only, is_ok_gesture,
-    is_scroll_gesture, process_navigation_gesture, 
+    is_navigation_gesture, is_index_finger_only, is_ok_gesture, is_alt_tab_ok_gesture,
+    is_scroll_gesture, is_open_hand, process_navigation_gesture, 
     process_mouse_control_gesture, process_mouse_click_gesture, process_scroll_gesture,
-    gesture_states, update_all_cooldowns, reset_all_gesture_states
+    process_alt_tab_gesture, gesture_states, update_all_cooldowns, reset_all_gesture_states
 )
 
 def main():
@@ -106,7 +106,8 @@ def main():
             mouse_control_active = False
             mouse_click_active = False
             navigation_active = False
-            scroll_active = False  # New flag for scroll gesture
+            scroll_active = False
+            alt_tab_active = False  # New flag for Alt+Tab gesture
             
             # First loop: Process mouse control gesture only (primary hand)
             for hand_landmarks in results.multi_hand_landmarks:
@@ -129,10 +130,22 @@ def main():
                         process_mouse_click_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
                         mouse_click_active = True
                         break
-            
-            # Third loop: Process other gestures if mouse control is not active
+              # Third loop: Process other gestures if mouse control is not active
             if not mouse_control_active:
-                for hand_landmarks in results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:                    # Check for Alt+Tab OK gesture first, but don't break if not found
+                    # This allows other gestures to work while Alt is being held
+                    from gestures import alt_tab_state
+                    if alt_tab_state.is_alt_pressed and is_alt_tab_ok_gesture(hand_landmarks):
+                        process_alt_tab_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                        alt_tab_active = True
+                        break  # Only break if OK gesture is found to end Alt state
+                      # Check for Alt+Tab gesture (open hand) - only if Alt is not already pressed
+                    from gestures import alt_tab_state
+                    if is_open_hand(hand_landmarks) and not alt_tab_state.is_alt_pressed:
+                        process_alt_tab_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                        alt_tab_active = True
+                        break
+                    
                     # Check for scroll gesture (L/V shape with thumb and index)
                     if is_scroll_gesture(hand_landmarks):
                         process_scroll_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
@@ -143,9 +156,10 @@ def main():
                     if not scroll_active and is_navigation_gesture(hand_landmarks):
                         process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
                         navigation_active = True
-                        break
-                      # Alt+F4 gesture functionality has been removed
-                    # This keeps the code structure while disabling the alt+f4 functionality
+                        break              # We don't need this special check anymore since we handle Alt+Tab OK gesture in the main loop
+            # This section is now redundant but kept for reference
+            # We've moved this functionality to the main gesture detection loop to allow other gestures
+            # to work while Alt is being held
             
             # Process each hand separately to add labels
             for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
@@ -171,15 +185,16 @@ def main():
                     0.5,
                     (255, 255, 0),
                     1
-                )
-              # If no recognizable gesture was found
-            if not (mouse_control_active or navigation_active or mouse_click_active or scroll_active):
-                # Reset all gesture states when no valid gesture is detected
-                reset_all_gesture_states(gesture_states)
+                )            # If no recognizable gesture was found - special handling when Alt is being held
+            from gestures import alt_tab_state
+            if not (mouse_control_active or navigation_active or mouse_click_active or scroll_active or alt_tab_active):
+                # Only reset gesture states if Alt is not being held
+                if not alt_tab_state.is_alt_pressed:
+                    reset_all_gesture_states(gesture_states)
                 
                 cv2.putText(
                     image, 
-                    "No valid gesture detected", 
+                    "No valid gesture detected" + (" (ALT still held)" if alt_tab_state.is_alt_pressed else ""), 
                     (10, 70), 
                     cv2.FONT_HERSHEY_SIMPLEX, 
                     0.7, 
@@ -199,18 +214,36 @@ def main():
                 (0, 0, 255), 
                 2
             )
-        
-        # Add gesture instruction text
+          # Add gesture instruction text
         cv2.putText(
             image, 
             "Navigation: 2 fingers extended → LEFT/RIGHT", 
+            (10, image_height - 180), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
+            (255, 255, 255), 
+            1
+        )
+        
+        cv2.putText(
+            image, 
+            "Alt+Tab: 5 fingers open hand → hold ALT ", 
             (10, image_height - 150), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.5, 
             (255, 255, 255), 
             1
         )
-          # Alt+F4 instruction removed
+        
+        cv2.putText(
+            image, 
+            "End Alt+Tab: OK gesture while holding ALT → release ALT + click", 
+            (10, image_height - 120), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
+            (255, 255, 255), 
+            1
+        )
         
         cv2.putText(
             image, 
