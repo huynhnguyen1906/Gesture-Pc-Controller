@@ -130,42 +130,41 @@ def main():
                     if is_ok_gesture(hand_landmarks):
                         process_mouse_click_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
                         mouse_click_active = True
-                        break
-              # Third loop: Process other gestures if mouse control is not active
+                        break              # Third loop: Process other gestures if mouse control is not active
             if not mouse_control_active:
-                for hand_landmarks in results.multi_hand_landmarks:                    # Check for Alt+Tab OK gesture first, but don't break if not found
-                    # This allows other gestures to work while Alt is being held
-                    from gestures import alt_tab_state
-                    if alt_tab_state.is_alt_pressed and is_alt_tab_ok_gesture(hand_landmarks):
-                        process_alt_tab_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                        alt_tab_active = True
-                        break  # Only break if OK gesture is found to end Alt state
-                      # Check for Alt+Tab gesture (open hand) - only if Alt is not already pressed
-                    from gestures import alt_tab_state
-                    if is_open_hand(hand_landmarks) and not alt_tab_state.is_alt_pressed:
-                        process_alt_tab_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                        alt_tab_active = True
-                        break
-                    
-                    # Check for scroll gesture (L/V shape with thumb and index)
-                    if is_scroll_gesture(hand_landmarks):
-                        process_scroll_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                        scroll_active = True
-                        break
-                      # Check for navigation gesture (index and middle fingers extended)
-                    if not scroll_active and is_navigation_gesture(hand_landmarks):
-                        process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                        navigation_active = True
-                        break
-                    
-                    # Check for voice command gesture (closed hand)
-                    if is_closed_hand(hand_landmarks):
-                        process_voice_command_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
-                        voice_command_active = True
-                        break# We don't need this special check anymore since we handle Alt+Tab OK gesture in the main loop
-            # This section is now redundant but kept for reference
-            # We've moved this functionality to the main gesture detection loop to allow other gestures
-            # to work while Alt is being held
+                # Special handling: If Alt+Tab is active, only allow Alt+Tab related gestures
+                from gestures import alt_tab_state
+                if alt_tab_state.is_alt_pressed:
+                    # Only process Alt+Tab gestures when Alt is being held
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        if is_open_hand(hand_landmarks) or is_alt_tab_ok_gesture(hand_landmarks):
+                            process_alt_tab_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                            alt_tab_active = True
+                            break
+                else:                    # Normal gesture processing when Alt+Tab is not active
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        # Check for Alt+Tab gesture (open hand)
+                        if is_open_hand(hand_landmarks):
+                            process_alt_tab_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                            alt_tab_active = True
+                            break
+                        
+                        # Check for scroll gesture (L/V shape with thumb and index)
+                        if is_scroll_gesture(hand_landmarks):
+                            process_scroll_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                            scroll_active = True
+                            break
+                        
+                        # Check for navigation gesture (index and middle fingers extended)
+                        if not scroll_active and is_navigation_gesture(hand_landmarks):
+                            process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                            navigation_active = True
+                            break
+                          # Check for voice command gesture (closed hand)
+                        if is_closed_hand(hand_landmarks):
+                            process_voice_command_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                            voice_command_active = True
+                            break
             
             # Process each hand separately to add labels
             for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
