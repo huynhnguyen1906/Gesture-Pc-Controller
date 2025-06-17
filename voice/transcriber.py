@@ -30,17 +30,10 @@ class WhisperTranscriber:
     def _load_model(self):
         """Load the Whisper model"""
         try:
-            # Check GPU availability with detailed info
-            if torch.cuda.is_available():
-                gpu_count = torch.cuda.device_count()
-                gpu_name = torch.cuda.get_device_name(0)
-                print(f"🚀 Loading Whisper model '{self.model_name}' on **GPU ({gpu_name})** ...")
-                print(f"   💡 GPU Count: {gpu_count}, CUDA Version: {torch.version.cuda}")
+            if self.device == "cuda":
+                print(f"🚀 Loading Whisper model '{self.model_name}' on **GPU (cuda)** ...")
             else:
                 print(f"🐢 Loading Whisper model '{self.model_name}' on **CPU** (no GPU available) ...")
-                print("   💡 To enable GPU: install PyTorch with CUDA support")
-                print("   💡 Command: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
-            
             self.model = whisper.load_model(self.model_name).to(self.device)
             print("✅ Whisper model loaded successfully!")
         except Exception as e:
@@ -107,22 +100,6 @@ class WhisperTranscriber:
     def is_model_loaded(self) -> bool:
         """Check if model is loaded and ready"""
         return self.model is not None
-    
-    def get_device_info(self) -> dict:
-        """Get detailed device information"""
-        info = {
-            "device": self.device,
-            "cuda_available": torch.cuda.is_available(),
-            "device_count": 0,
-            "device_name": "N/A",
-            "cuda_version": torch.version.cuda if torch.cuda.is_available() else "N/A"
-        }
-        
-        if torch.cuda.is_available():
-            info["device_count"] = torch.cuda.device_count()
-            info["device_name"] = torch.cuda.get_device_name(0)
-            
-        return info
 
 # Global transcriber instance
 transcriber = WhisperTranscriber()
