@@ -23,9 +23,10 @@ from config import (
 # Import from gesture package
 from gestures import (
     is_navigation_gesture, is_index_finger_only, is_ok_gesture, is_alt_tab_ok_gesture,
-    is_scroll_gesture, is_open_hand, process_navigation_gesture, 
+    is_scroll_gesture, is_open_hand, is_closed_hand, process_navigation_gesture, 
     process_mouse_control_gesture, process_mouse_click_gesture, process_scroll_gesture,
-    process_alt_tab_gesture, gesture_states, update_all_cooldowns, reset_all_gesture_states
+    process_alt_tab_gesture, process_voice_command_gesture, gesture_states, 
+    update_all_cooldowns, reset_all_gesture_states
 )
 
 def main():
@@ -100,14 +101,14 @@ def main():
         
         # Update cooldowns regardless of whether a hand is detected
         update_all_cooldowns(gesture_states, actual_fps)
-        
-        # Process hand landmarks if detected
+          # Process hand landmarks if detected
         if results.multi_hand_landmarks:            # Keep track of whether specific gestures have been recognized
             mouse_control_active = False
             mouse_click_active = False
             navigation_active = False
             scroll_active = False
             alt_tab_active = False  # New flag for Alt+Tab gesture
+            voice_command_active = False  # New flag for voice command gesture
             
             # First loop: Process mouse control gesture only (primary hand)
             for hand_landmarks in results.multi_hand_landmarks:
@@ -151,12 +152,17 @@ def main():
                         process_scroll_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
                         scroll_active = True
                         break
-                    
-                    # Check for navigation gesture (index and middle fingers extended)
+                      # Check for navigation gesture (index and middle fingers extended)
                     if not scroll_active and is_navigation_gesture(hand_landmarks):
                         process_navigation_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
                         navigation_active = True
-                        break              # We don't need this special check anymore since we handle Alt+Tab OK gesture in the main loop
+                        break
+                    
+                    # Check for voice command gesture (closed hand)
+                    if is_closed_hand(hand_landmarks):
+                        process_voice_command_gesture(image, hand_landmarks, actual_fps, image_width, image_height)
+                        voice_command_active = True
+                        break# We don't need this special check anymore since we handle Alt+Tab OK gesture in the main loop
             # This section is now redundant but kept for reference
             # We've moved this functionality to the main gesture detection loop to allow other gestures
             # to work while Alt is being held
@@ -187,7 +193,7 @@ def main():
                     1
                 )            # If no recognizable gesture was found - special handling when Alt is being held
             from gestures import alt_tab_state
-            if not (mouse_control_active or navigation_active or mouse_click_active or scroll_active or alt_tab_active):
+            if not (mouse_control_active or navigation_active or mouse_click_active or scroll_active or alt_tab_active or voice_command_active):
                 # Only reset gesture states if Alt is not being held
                 if not alt_tab_state.is_alt_pressed:
                     reset_all_gesture_states(gesture_states)
@@ -264,11 +270,21 @@ def main():
             (255, 255, 255), 
             1
         )
-        
-        # New instruction for scroll gesture
+          # New instruction for scroll gesture
         cv2.putText(
             image, 
             "Scroll: Thumb + Index in L/V shape → VERTICAL scroll from reference point", 
+            (10, image_height - 60), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
+            (255, 255, 255), 
+            1
+        )
+        
+        # New instruction for voice command gesture
+        cv2.putText(
+            image, 
+            "Voice Command: Closed fist → Record 3s voice command (Japanese)", 
             (10, image_height - 30), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.5, 

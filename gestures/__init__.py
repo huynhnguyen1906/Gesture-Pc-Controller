@@ -14,6 +14,7 @@ from gestures.base import (
     is_alt_tab_ok_gesture,  # Add the relaxed OK gesture for Alt+Tab
     is_scroll_gesture,  
     is_open_hand,  # Add the open hand gesture detection for Alt+Tab
+    is_closed_hand,  # Add closed hand gesture for voice commands
     update_all_cooldowns,
     reset_all_gesture_states
 )
@@ -52,6 +53,12 @@ from gestures.scroll import (
     reset_scroll_orientation
 )
 
+# Import the voice command module
+from gestures.voice_command import (
+    voice_command_state,
+    process_voice_command_gesture
+)
+
 # Dictionary of all gesture states
 gesture_states = {
     'navigation': navigation_state,
@@ -59,7 +66,8 @@ gesture_states = {
     'mouse': mouse_state,
     'mouse_click': mouse_click_state,
     'scroll': scroll_state,
-    'alt_tab': alt_tab_state  # Add the new Alt+Tab state
+    'alt_tab': alt_tab_state,  # Add the new Alt+Tab state
+    'voice_command': voice_command_state  # Add voice command state
 }
 
 # All available gesture check functions
@@ -68,7 +76,8 @@ gesture_checks = {
     'mouse': is_index_finger_only,
     'mouse_click': is_ok_gesture,
     'scroll': is_scroll_gesture,
-    'alt_tab': is_open_hand  # Add the new Alt+Tab gesture check
+    'alt_tab': is_open_hand,  # Add the new Alt+Tab gesture check
+    'voice_command': is_closed_hand  # Add voice command gesture check
 }
 
 # All available gesture process functions
@@ -78,5 +87,6 @@ gesture_processes = {
     'mouse': process_mouse_control_gesture,
     'mouse_click': process_mouse_click_gesture,
     'scroll': process_scroll_gesture,
-    'alt_tab': process_alt_tab_gesture  # Add the new Alt+Tab process
+    'alt_tab': process_alt_tab_gesture,  # Add the new Alt+Tab process
+    'voice_command': process_voice_command_gesture  # Add voice command process
 }

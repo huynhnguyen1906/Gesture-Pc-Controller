@@ -230,16 +230,47 @@ def is_open_hand(hand_landmarks):
 
 def is_closed_hand(hand_landmarks):
     """
-    This function has been disabled - Alt+F4 gesture feature was removed
-    Always returns False
+    Check if the hand is in a closed fist position (for voice command trigger)
+    More strict version to avoid false positives
     """
-    # Feature disabled
-    return False
-    middle_bent = middle_tip.y > middle_pip.y
-    ring_bent = ring_tip.y > ring_pip.y
-    pinky_bent = pinky_tip.y > pinky_pip.y
+    # Get finger landmarks
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    thumb_ip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_IP]
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    index_pip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP]
+    index_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    middle_pip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
+    middle_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    ring_pip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_PIP]
+    ring_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_MCP]
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+    pinky_pip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_PIP]
+    pinky_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
     
-    return index_bent and middle_bent and ring_bent and pinky_bent
+    # More strict finger bend checking
+    # Check if fingertips are significantly below PIP joints (not just slightly)
+    index_bent = index_tip.y > index_pip.y + 0.02  # Add margin for stricter detection
+    middle_bent = middle_tip.y > middle_pip.y + 0.02
+    ring_bent = ring_tip.y > ring_pip.y + 0.02
+    pinky_bent = pinky_tip.y > pinky_pip.y + 0.02
+    
+    # Additional check: fingertips should be closer to wrist than MCP joints
+    index_closer_to_wrist = np.sqrt((index_tip.x - wrist.x)**2 + (index_tip.y - wrist.y)**2) < np.sqrt((index_mcp.x - wrist.x)**2 + (index_mcp.y - wrist.y)**2)
+    middle_closer_to_wrist = np.sqrt((middle_tip.x - wrist.x)**2 + (middle_tip.y - wrist.y)**2) < np.sqrt((middle_mcp.x - wrist.x)**2 + (middle_mcp.y - wrist.y)**2)
+    ring_closer_to_wrist = np.sqrt((ring_tip.x - wrist.x)**2 + (ring_tip.y - wrist.y)**2) < np.sqrt((ring_mcp.x - wrist.x)**2 + (ring_mcp.y - wrist.y)**2)
+    pinky_closer_to_wrist = np.sqrt((pinky_tip.x - wrist.x)**2 + (pinky_tip.y - wrist.y)**2) < np.sqrt((pinky_mcp.x - wrist.x)**2 + (pinky_mcp.y - wrist.y)**2)
+    
+    # Check thumb is also bent/closed
+    thumb_bent = np.sqrt((thumb_tip.x - wrist.x)**2 + (thumb_tip.y - wrist.y)**2) < np.sqrt((thumb_ip.x - wrist.x)**2 + (thumb_ip.y - wrist.y)**2)
+    
+    # All conditions must be met for a proper closed fist
+    fingers_bent = index_bent and middle_bent and ring_bent and pinky_bent
+    fingers_close_to_wrist = index_closer_to_wrist and middle_closer_to_wrist and ring_closer_to_wrist and pinky_closer_to_wrist
+    
+    return fingers_bent and fingers_close_to_wrist and thumb_bent
 
 def is_index_finger_only(hand_landmarks):
     """
