@@ -41,13 +41,19 @@ DEFAULT_MOVEMENT_THRESHOLD = 20
 DEFAULT_Y_MOVEMENT_THRESHOLD = 20
 
 # Seconds to confirm gesture before tracking
-DEFAULT_GESTURE_CONFIRMATION_TIME = 0.3
+DEFAULT_GESTURE_CONFIRMATION_TIME = 0.5
 
 # Seconds between gesture detections
-DEFAULT_GESTURE_COOLDOWN_TIME = 0.3
+DEFAULT_GESTURE_COOLDOWN_TIME = 0.5
 
-# Wait this many frames after a key press
-DEFAULT_COOLDOWN_FRAMES = 5
+# Base cooldown time in seconds after key press (FPS-independent)
+DEFAULT_COOLDOWN_TIME_SECONDS = 0.2
+
+# Minimum FPS for stable operation
+MIN_STABLE_FPS = 10
+
+# Target FPS for timing calculations
+TARGET_FPS = 30
 
 # --- Mouse control settings ---
 
@@ -55,7 +61,7 @@ DEFAULT_COOLDOWN_FRAMES = 5
 DEFAULT_SMOOTHING_FACTOR = 0.7
 
 # Increase sensitivity for mouse movement
-DEFAULT_SENSITIVITY_MULTIPLIER = 1.1
+DEFAULT_SENSITIVITY_MULTIPLIER = 1.5
 
 # Default screen resolution, will be updated
 DEFAULT_SCREEN_WIDTH = 1920

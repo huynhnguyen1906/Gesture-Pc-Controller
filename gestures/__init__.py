@@ -49,8 +49,7 @@ from gestures.mouse_click import (
 # Import the new scroll module
 from gestures.scroll import (
     scroll_state,
-    process_scroll_gesture,
-    reset_scroll_orientation
+    process_scroll_gesture
 )
 
 # Import the voice command module

@@ -13,8 +13,7 @@ from config import (
     THUMB_TIP, INDEX_FINGER_TIP, INDEX_FINGER_PIP, MIDDLE_FINGER_TIP,
     MIDDLE_FINGER_PIP, RING_FINGER_TIP, RING_FINGER_PIP, PINKY_TIP, PINKY_PIP, WRIST,
     DEFAULT_MOVEMENT_THRESHOLD, DEFAULT_Y_MOVEMENT_THRESHOLD, DEFAULT_GESTURE_CONFIRMATION_TIME,
-    DEFAULT_GESTURE_COOLDOWN_TIME, DEFAULT_COOLDOWN_FRAMES,
-    DEFAULT_SMOOTHING_FACTOR, DEFAULT_SENSITIVITY_MULTIPLIER,
+    DEFAULT_GESTURE_COOLDOWN_TIME, DEFAULT_SMOOTHING_FACTOR, DEFAULT_SENSITIVITY_MULTIPLIER,
     DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT
 )
 
@@ -26,13 +25,15 @@ class GestureState:
         self.gesture_active = False
 
         self.movement_threshold = DEFAULT_MOVEMENT_THRESHOLD
-        self.cooldown_counter = 0
-        self.cooldown_frames = DEFAULT_COOLDOWN_FRAMES
-
+        
+        # Time-based timing (replacing frame-based)
+        self.cooldown_start_time = 0
+        self.cooldown_duration = 0.2  # Default cooldown duration in seconds
+        
         self.gesture_confirmation_time = DEFAULT_GESTURE_CONFIRMATION_TIME
-        self.gesture_confirmation_counter = 0
+        self.gesture_confirmation_start_time = 0
         self.gesture_cooldown_time = DEFAULT_GESTURE_COOLDOWN_TIME
-        self.gesture_cooldown_counter = 0
+        self.gesture_cooldown_start_time = 0
         self.confirmed_gesture = False
 
         # For open-close hand gesture
@@ -45,29 +46,58 @@ class GestureState:
         self.screen_height = DEFAULT_SCREEN_HEIGHT
         self.sensitivity_multiplier = DEFAULT_SENSITIVITY_MULTIPLIER
 
-        # For scroll gesture
-        self.scroll_orientation = None
+        # For scroll gesture        self.scroll_orientation = None
         
         # For Alt+Tab gesture
         self.is_alt_pressed = False  # Whether Alt key is being held
         self.alt_tab_activated = False  # Whether Alt+Tab was activated
         self.y_movement_threshold = DEFAULT_Y_MOVEMENT_THRESHOLD  # Minimum Y movement to trigger Alt+Tab
 
-
     def reset(self):
         self.gesture_active = False
         self.confirmed_gesture = False
-        self.gesture_confirmation_counter = 0
+        self.gesture_confirmation_start_time = 0
         self.prev_x = None
         self.prev_y = None
         self.scroll_orientation = None
+        # Reset reference points for scroll gesture
+        if hasattr(self, 'reference_x'):
+            self.reference_x = None
+        if hasattr(self, 'reference_y'):
+            self.reference_y = None
 
     def update_cooldown(self):
-        if self.cooldown_counter > 0:
-            self.cooldown_counter -= 1
-
-        if self.gesture_cooldown_counter > 0:
-            self.gesture_cooldown_counter -= 1
+        # Time-based cooldowns are checked by comparing current time with start times
+        # No need to decrement counters
+        pass
+    
+    def is_cooldown_active(self):
+        """Check if any cooldown is currently active"""
+        current_time = time.time()
+        return (current_time - self.cooldown_start_time < self.cooldown_duration or 
+                current_time - self.gesture_cooldown_start_time < self.gesture_cooldown_time)
+    
+    def start_cooldown(self, duration=None):
+        """Start a cooldown period"""
+        if duration is None:
+            duration = self.cooldown_duration
+        self.cooldown_start_time = time.time()
+        self.cooldown_duration = duration
+    
+    def start_gesture_cooldown(self):
+        """Start the main gesture cooldown"""
+        self.gesture_cooldown_start_time = time.time()
+    
+    def start_gesture_confirmation(self):
+        """Start gesture confirmation timer"""
+        self.gesture_confirmation_start_time = time.time()
+    
+    def is_gesture_confirmed(self):
+        """Check if gesture has been held long enough to be confirmed"""
+        if self.gesture_confirmation_start_time == 0:
+            return False
+        current_time = time.time()
+        return current_time - self.gesture_confirmation_start_time >= self.gesture_confirmation_time
 
 def is_navigation_gesture(hand_landmarks):
     """
@@ -479,9 +509,9 @@ def is_alt_tab_ok_gesture(hand_landmarks):
     return thumb_index_circle and other_fingers_extended
 
 def update_all_cooldowns(gesture_states, fps):
-    """Update all gesture state cooldowns"""
-    for state in gesture_states.values():
-        state.update_cooldown()
+    """Update all gesture state cooldowns - no longer needed with time-based timing"""
+    # Time-based timing doesn't require updates, cooldowns are checked on demand
+    pass
 
 def reset_all_gesture_states(gesture_states):
     """Reset all gesture states when no hand is detected"""

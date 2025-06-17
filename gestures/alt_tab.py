@@ -60,15 +60,14 @@ def handle_alt_tab_confirmation(image, state):
     # Press Space key to confirm selection
     keyboard.press(Key.space)
     keyboard.release(Key.space)
-    
-    # Reset all state
+      # Reset all state
     state.confirmed_gesture = False
-    state.gesture_confirmation_counter = 0
+    state.gesture_confirmation_start_time = 0
     state.reference_x = None
     state.reference_y = None
     state.last_direction = None
     state.last_arrow_press_time = 0
-    state.cooldown_counter = 30  # Cooldown after completion
+    state.start_gesture_cooldown()  # Cooldown after completion
     
     # Display completion message
     cv2.putText(
@@ -166,8 +165,10 @@ def handle_horizontal_tracking(image, hand_landmarks, state, image_width, image_
 def handle_alt_tab_activation(image, hand_landmarks, state, fps, confirmation_frames, image_width, image_height):
     """Handle initial Alt+Tab activation"""
     # Check if we're in cooldown period
-    if state.cooldown_counter > 0:
-        cv2.putText(image, f"Alt+Tab cooldown: {state.cooldown_counter / fps:.1f}s", 
+    if state.is_cooldown_active():
+        current_time = time.time()
+        remaining_cooldown = max(0, state.gesture_cooldown_time - (current_time - state.gesture_cooldown_start_time))
+        cv2.putText(image, f"Alt+Tab cooldown: {remaining_cooldown:.1f}s", 
                    (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
         return image
     
@@ -176,25 +177,30 @@ def handle_alt_tab_activation(image, hand_landmarks, state, fps, confirmation_fr
         # Reset if gesture is not valid
         if state.confirmed_gesture:
             state.confirmed_gesture = False
-            state.gesture_confirmation_counter = 0
+            state.gesture_confirmation_start_time = 0
             
         cv2.putText(image, "Alt+Tab: Open hand gesture", 
                    (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         return image
-    
-    # Process gesture confirmation
+      # Process gesture confirmation
     if not state.confirmed_gesture:
-        state.gesture_confirmation_counter += 1
+        # Start confirmation timer if not started
+        if state.gesture_confirmation_start_time == 0:
+            state.start_gesture_confirmation()
+        
+        # Calculate confirmation progress
+        current_time = time.time()
+        elapsed_time = current_time - state.gesture_confirmation_start_time
+        progress = min(1.0, elapsed_time / state.gesture_confirmation_time)
         
         # Show confirmation progress
-        progress = state.gesture_confirmation_counter / confirmation_frames
         cv2.putText(image, f"Alt+Tab confirming... {progress:.1%}", 
                    (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         
         # Check if gesture is confirmed
-        if state.gesture_confirmation_counter >= confirmation_frames:
+        if state.is_gesture_confirmed():
             state.confirmed_gesture = True
-            state.gesture_confirmation_counter = 0
+            state.gesture_confirmation_start_time = 0
             
             # Activate Alt+Tab
             keyboard.press(Key.alt)
@@ -214,14 +220,14 @@ def cancel_alt_tab(image, state):
     if state.is_alt_pressed:
         keyboard.release(Key.alt)
         state.is_alt_pressed = False
-    
+     
     state.alt_tab_activated = False
     state.confirmed_gesture = False
-    state.gesture_confirmation_counter = 0
+    state.gesture_confirmation_start_time = 0
     state.reference_x = None
     state.reference_y = None
     state.last_direction = None
-    state.cooldown_counter = 30  # Short cooldown    
+    state.start_gesture_cooldown()  # Short cooldown
     cv2.putText(image, "Alt+Tab Cancelled", 
                (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
     

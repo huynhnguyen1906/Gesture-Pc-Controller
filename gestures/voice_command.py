@@ -7,6 +7,7 @@ Uses closed hand gesture to trigger voice recording and processing
 """
 
 import cv2
+import time
 from gestures.base import GestureState, is_closed_hand
 
 # Create state for voice command gesture
@@ -19,16 +20,15 @@ def process_voice_command_gesture(image, hand_landmarks, fps, image_width, image
     global voice_command_state
     state = voice_command_state
     
-    # Calculate frames needed for gesture confirmation and cooldown
-    confirmation_frames = int(state.gesture_confirmation_time * fps)
-    cooldown_frames = int(state.gesture_cooldown_time * fps)
-    
     # Check if we're in cooldown period
-    if state.gesture_cooldown_counter > 0:
+    if state.is_cooldown_active():
+        current_time = time.time()
+        remaining_cooldown = max(0, state.gesture_cooldown_time - (current_time - state.gesture_cooldown_start_time))
+        
         cv2.putText(
             image, 
-            f"Voice cooldown: {state.gesture_cooldown_counter / fps:.1f}s", 
-            (10, 200), 
+            f"Voice cooldown: {remaining_cooldown:.1f}s", 
+            (10, 430), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
             (255, 165, 0),  # Orange
@@ -41,12 +41,12 @@ def process_voice_command_gesture(image, hand_landmarks, fps, image_width, image
         # Reset gesture state if hand is not closed
         if state.confirmed_gesture:
             state.confirmed_gesture = False
-            state.gesture_confirmation_counter = 0
+            state.gesture_confirmation_start_time = 0
             
         cv2.putText(
             image, 
             "Voice trigger: Make closed fist gesture", 
-            (10, 200), 
+            (10, 430), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
             (255, 255, 255), 
@@ -56,14 +56,20 @@ def process_voice_command_gesture(image, hand_landmarks, fps, image_width, image
     
     # Gesture is valid, check confirmation
     if not state.confirmed_gesture:
-        state.gesture_confirmation_counter += 1
+        # Start confirmation timer if not started
+        if state.gesture_confirmation_start_time == 0:
+            state.start_gesture_confirmation()
+        
+        # Calculate confirmation progress
+        current_time = time.time()
+        elapsed_time = current_time - state.gesture_confirmation_start_time
+        progress = min(1.0, elapsed_time / state.gesture_confirmation_time)
         
         # Show confirmation progress
-        progress = state.gesture_confirmation_counter / confirmation_frames
         cv2.putText(
             image, 
             f"Voice trigger confirming... {progress:.1%}", 
-            (10, 200), 
+            (10, 430), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
             (255, 255, 0),  # Yellow
@@ -71,21 +77,21 @@ def process_voice_command_gesture(image, hand_landmarks, fps, image_width, image
         )
         
         # Check if gesture is confirmed
-        if state.gesture_confirmation_counter >= confirmation_frames:
+        if state.is_gesture_confirmed():
             state.confirmed_gesture = True
-            state.gesture_confirmation_counter = 0
+            state.gesture_confirmation_start_time = 0
             
-            # Trigger voice recording
+            # Trigger voice recording ONLY ONCE
             trigger_voice_recording()
             
             # Set cooldown
-            state.gesture_cooldown_counter = cooldown_frames
+            state.start_gesture_cooldown()
     else:
-        # Gesture already confirmed, show processing state
+        # Gesture already confirmed, show processing state (NO RE-TRIGGERING)
         cv2.putText(
             image, 
             "Voice command triggered! Processing...", 
-            (10, 200), 
+            (10, 430), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
             (0, 255, 0),  # Green

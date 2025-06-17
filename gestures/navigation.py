@@ -6,6 +6,7 @@ Navigation gesture module for controlling left/right arrow keys
 """
 
 import cv2
+import time
 from pynput.keyboard import Key
 from config import keyboard
 from gestures.base import GestureState, is_navigation_gesture
@@ -18,16 +19,15 @@ def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_he
     global navigation_state
     state = navigation_state
     
-    # Calculate frames needed for gesture confirmation and cooldown
-    confirmation_frames = int(state.gesture_confirmation_time * fps)
-    cooldown_frames = int(state.gesture_cooldown_time * fps)
-    
     # Check if we're in cooldown period after a successful navigation gesture
-    if state.gesture_cooldown_counter > 0:
+    if state.is_cooldown_active():
+        current_time = time.time()
+        remaining_cooldown = max(0, state.gesture_cooldown_time - (current_time - state.gesture_cooldown_start_time))
+        
         # Display cooldown message
         cv2.putText(
             image, 
-            f"Navigation cooldown: {state.gesture_cooldown_counter / fps:.1f}s", 
+            f"Navigation cooldown: {remaining_cooldown:.1f}s", 
             (10, 70), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
@@ -45,7 +45,7 @@ def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_he
     # If gesture was confirmed but is no longer valid, cancel it
     if state.confirmed_gesture and not is_valid_gesture:
         state.confirmed_gesture = False
-        state.gesture_confirmation_counter = 0
+        state.gesture_confirmation_start_time = 0
         state.prev_x = None
         
         # Display cancellation message
@@ -79,9 +79,9 @@ def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_he
             (0, 255, 0), 
             2
         )
-        
-        # Only track movement if we have a previous position and not in cooldown
-        if state.prev_x is not None and state.cooldown_counter == 0:
+          # Only track movement if we have a previous position and not in brief cooldown
+        current_time = time.time()
+        if state.prev_x is not None and not (current_time - state.cooldown_start_time < state.cooldown_duration):
             x_movement = state.prev_x - current_x
             
             # Display movement direction and magnitude
@@ -110,13 +110,12 @@ def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_he
                     keyboard.press(Key.right)
                     keyboard.release(Key.right)
                     
-                    # Start cooldown period after action
-                    state.cooldown_counter = int(0.2 * fps)  # Brief cooldown after key press
-                    state.gesture_cooldown_counter = cooldown_frames  # Main cooldown for gesture 
+                    # Start cooldown periods after action
+                    state.start_cooldown(0.2)  # Brief cooldown after key press                    state.start_gesture_cooldown()  # Main cooldown for gesture 
                     
                     # Reset the gesture detection process
                     state.confirmed_gesture = False
-                    state.gesture_confirmation_counter = 0
+                    state.gesture_confirmation_start_time = 0
                     state.prev_x = None
                     
                 elif x_movement < 0:  # Left to right movement
@@ -132,26 +131,30 @@ def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_he
                     keyboard.press(Key.left)
                     keyboard.release(Key.left)
                     
-                    # Start cooldown period after action
-                    state.cooldown_counter = int(0.2 * fps)  # Brief cooldown after key press
-                    state.gesture_cooldown_counter = cooldown_frames  # Main cooldown for gesture
+                    # Start cooldown periods after action
+                    state.start_cooldown(0.2)  # Brief cooldown after key press
+                    state.start_gesture_cooldown()  # Main cooldown for gesture
                     
                     # Reset the gesture detection process
                     state.confirmed_gesture = False
-                    state.gesture_confirmation_counter = 0
+                    state.gesture_confirmation_start_time = 0
                     state.prev_x = None
         
         # Update previous position
         state.prev_x = current_x
         state.gesture_active = True
-        
-    # If gesture is not yet confirmed but is valid, increment confirmation counter
+          # If gesture is not yet confirmed but is valid, start or continue confirmation timer
     elif is_valid_gesture:
-        # Increment confirmation counter
-        state.gesture_confirmation_counter += 1
+        # Start confirmation timer if not started
+        if state.gesture_confirmation_start_time == 0:
+            state.start_gesture_confirmation()
+        
+        # Calculate confirmation progress
+        current_time = time.time()
+        elapsed_time = current_time - state.gesture_confirmation_start_time
+        confirmation_percent = min(100, int((elapsed_time / state.gesture_confirmation_time) * 100))
         
         # Display confirmation progress
-        confirmation_percent = min(100, int((state.gesture_confirmation_counter / confirmation_frames) * 100))
         cv2.putText(
             image, 
             f"Confirming navigation gesture: {confirmation_percent}%", 
@@ -163,7 +166,7 @@ def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_he
         )
         
         # Check if gesture has been held long enough to confirm
-        if state.gesture_confirmation_counter >= confirmation_frames:
+        if state.is_gesture_confirmed():
             state.confirmed_gesture = True
             # Get initial position once gesture is confirmed
             index_tip = hand_landmarks.landmark[8]  # INDEX_FINGER_TIP
@@ -180,8 +183,8 @@ def process_navigation_gesture(image, hand_landmarks, fps, image_width, image_he
                 2
             )
     else:
-        # Reset confirmation counter if gesture is not valid
-        state.gesture_confirmation_counter = 0
+        # Reset confirmation timer if gesture is not valid
+        state.gesture_confirmation_start_time = 0
     
     # Update state
     navigation_state = state

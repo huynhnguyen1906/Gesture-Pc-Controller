@@ -6,8 +6,9 @@ Mouse clicking gesture module for clicking the mouse while controlling the curso
 """
 
 import cv2
+import time
 from config import mouse
-from pynput.mouse import Button  # Thêm import Button từ pynput.mouse
+from pynput.mouse import Button
 from gestures.base import GestureState
 
 # Create state for mouse click gesture
@@ -18,9 +19,6 @@ def process_mouse_click_gesture(image, hand_landmarks, fps, image_width, image_h
     global mouse_click_state
     state = mouse_click_state
     
-    # Calculate frames needed for gesture confirmation and cooldown
-    confirmation_frames = int(state.gesture_confirmation_time * fps)
-    
     # Check if gesture is still valid (is_ok_gesture needs to be imported)
     from gestures.base import is_ok_gesture
     is_valid_gesture = is_ok_gesture(hand_landmarks)
@@ -28,78 +26,101 @@ def process_mouse_click_gesture(image, hand_landmarks, fps, image_width, image_h
     # If gesture was confirmed but is no longer valid, cancel it
     if state.confirmed_gesture and not is_valid_gesture:
         state.confirmed_gesture = False
-        state.gesture_confirmation_counter = 0
+        state.gesture_confirmation_start_time = 0
         
-        # Display cancellation message
         cv2.putText(
             image, 
-            "Mouse click cancelled: Invalid gesture", 
-            (10, 470), 
+            "Mouse click canceled", 
+            (10, 150), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
             (0, 0, 255), 
             2
         )
         
-        # Update state and return early
+        # Update state and return
         mouse_click_state = state
         return image
-    
-    # If gesture was confirmed, perform the mouse click
-    if state.confirmed_gesture:
-        if state.cooldown_counter == 0:
-            # Perform left mouse click - sử dụng Button.left thay vì string 'left'
+
+    # Process confirmed gesture
+    if state.confirmed_gesture and is_valid_gesture:
+        # Check if we're in cooldown after a recent click
+        current_time = time.time()
+        if current_time - state.cooldown_start_time < state.cooldown_duration:
+            remaining_cooldown = state.cooldown_duration - (current_time - state.cooldown_start_time)
+            
+            cv2.putText(
+                image, 
+                f"Click cooldown: {remaining_cooldown:.1f}s", 
+                (10, 150), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (255, 165, 0), 
+                2
+            )
+        else:
+            # Perform click
             mouse.click(Button.left)
             
-            # Display click status
             cv2.putText(
                 image, 
                 "LEFT CLICK!", 
-                (10, 510), 
+                (10, 150), 
                 cv2.FONT_HERSHEY_SIMPLEX, 
                 0.9, 
                 (0, 0, 255), 
                 2
             )
             
-            # Set cooldown to avoid multiple clicks
-            state.cooldown_counter = int(0.5 * fps)  # 0.5 second cooldown
-        else:
-            # Display cooldown status
-            cv2.putText(
-                image, 
-                f"Click cooldown: {state.cooldown_counter / fps:.1f}s", 
-                (10, 510), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.7, 
-                (255, 165, 0), 
-                2
-            )
-        
-        # Display active gesture status
-        cv2.putText(
-            image, 
-            "Mouse Click Gesture Active", 
-            (10, 470), 
-            cv2.FONT_HERSHEY_SIMPLEX, 
-            0.7, 
-            (0, 255, 0), 
-            2
-        )
+            # Start cooldown period
+            state.start_cooldown(0.5)  # 0.5 second cooldown
+            
+            # Reset gesture after click
+            state.confirmed_gesture = False
+            state.gesture_confirmation_start_time = 0
         
         state.gesture_active = True
         
-    # If gesture is not yet confirmed but is valid, increment confirmation counter
+    # If gesture is not yet confirmed but is valid, start or continue confirmation timer
     elif is_valid_gesture:
-        # Increment confirmation counter
-        state.gesture_confirmation_counter += 1
+        # Start confirmation timer if not started
+        if state.gesture_confirmation_start_time == 0:
+            state.start_gesture_confirmation()
         
-        # Display confirmation progress
-        confirmation_percent = min(100, int((state.gesture_confirmation_counter / confirmation_frames) * 100))
+        # Calculate confirmation progress
+        current_time = time.time()
+        elapsed_time = current_time - state.gesture_confirmation_start_time
+        confirmation_percent = min(100, int((elapsed_time / state.gesture_confirmation_time) * 100))
+        
+        # Get thumb and index finger tips for visualization
+        thumb_tip = hand_landmarks.landmark[4]  # THUMB_TIP
+        index_tip = hand_landmarks.landmark[8]  # INDEX_FINGER_TIP
+        
+        thumb_x = int(thumb_tip.x * image_width)
+        thumb_y = int(thumb_tip.y * image_height)
+        index_x = int(index_tip.x * image_width)
+        index_y = int(index_tip.y * image_height)
+        
+        # Draw OK gesture indicator
+        cv2.circle(image, (thumb_x, thumb_y), 8, (255, 0, 255), -1)
+        cv2.circle(image, (index_x, index_y), 8, (255, 0, 255), -1)
+        cv2.line(image, (thumb_x, thumb_y), (index_x, index_y), (255, 0, 255), 3)
+        
         cv2.putText(
             image, 
-            f"Confirming click gesture: {confirmation_percent}%", 
-            (10, 470), 
+            "OK", 
+            ((thumb_x + index_x) // 2 - 10, (thumb_y + index_y) // 2 - 10), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.6, 
+            (255, 0, 255), 
+            2
+        )
+        
+        # Display confirmation progress
+        cv2.putText(
+            image, 
+            f"Confirming mouse click: {confirmation_percent}%", 
+            (10, 150), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
             (255, 255, 0), 
@@ -107,21 +128,36 @@ def process_mouse_click_gesture(image, hand_landmarks, fps, image_width, image_h
         )
         
         # Check if gesture has been held long enough to confirm
-        if state.gesture_confirmation_counter >= confirmation_frames:
+        if state.is_gesture_confirmed():
             state.confirmed_gesture = True
             
             cv2.putText(
                 image, 
-                "Click Gesture Activated!", 
-                (10, 510), 
+                "Mouse Click Confirmed!", 
+                (10, 190), 
                 cv2.FONT_HERSHEY_SIMPLEX, 
                 0.7, 
                 (0, 255, 0), 
                 2
             )
     else:
-        # Reset confirmation counter if gesture is not valid
-        state.gesture_confirmation_counter = 0
+        # Reset confirmation timer if gesture is not valid
+        state.gesture_confirmation_start_time = 0
+        
+        # If we were in the middle of an active gesture, reset it
+        if state.confirmed_gesture:
+            cv2.putText(
+                image, 
+                "Mouse click ended", 
+                (10, 150), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (0, 255, 255), 
+                2
+            )
+            
+            # Reset click state
+            state.reset()
     
     # Update state
     mouse_click_state = state

@@ -7,6 +7,7 @@ Only allows vertical scrolling with reference point tracking
 """
 
 import cv2
+import time
 import numpy as np
 from pynput.mouse import Button, Controller
 from config import mouse
@@ -23,16 +24,15 @@ def process_scroll_gesture(image, hand_landmarks, fps, image_width, image_height
     global scroll_state
     state = scroll_state
     
-    # Calculate frames needed for gesture confirmation and cooldown
-    confirmation_frames = int(state.gesture_confirmation_time * fps)
-    cooldown_frames = int(state.gesture_cooldown_time * fps)
-    
     # Check if we're in cooldown period after a successful scroll gesture
-    if state.gesture_cooldown_counter > 0:
+    if state.is_cooldown_active():
+        current_time = time.time()
+        remaining_cooldown = max(0, state.gesture_cooldown_time - (current_time - state.gesture_cooldown_start_time))
+        
         # Display cooldown message
         cv2.putText(
             image, 
-            f"Scroll cooldown: {state.gesture_cooldown_counter / fps:.1f}s", 
+            f"Scroll cooldown: {remaining_cooldown:.1f}s", 
             (10, 310), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
@@ -47,18 +47,16 @@ def process_scroll_gesture(image, hand_landmarks, fps, image_width, image_height
     # Check if gesture is still valid
     is_valid_gesture = is_scroll_gesture(hand_landmarks)
     
-    # If gesture was confirmed but is no longer valid, cancel it and reset reference point
-    # Đây là trường hợp khi tay vẫn trong camera nhưng tư thế không còn hợp lệ cho scroll nữa
+    # If gesture was confirmed but is no longer valid, cancel it
     if state.confirmed_gesture and not is_valid_gesture:
         state.confirmed_gesture = False
-        state.gesture_confirmation_counter = 0
-        state.prev_x = None  # Reset reference point
-        state.prev_y = None  # Reset reference point
+        state.gesture_confirmation_start_time = 0
+        state.prev_y = None
+        state.scroll_orientation = None
         
-        # Display cancellation message
         cv2.putText(
             image, 
-            "Scroll gesture cancelled: Invalid gesture", 
+            "Scroll gesture canceled", 
             (10, 310), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
@@ -69,88 +67,38 @@ def process_scroll_gesture(image, hand_landmarks, fps, image_width, image_height
         # Update state and return
         scroll_state = state
         return image
-    
-    # If gesture was confirmed, track movement
-    if state.confirmed_gesture:
-        # Get index finger tip and thumb tip positions
-        index_tip = hand_landmarks.landmark[8]  # INDEX_FINGER_TIP
+
+    # Process confirmed gesture
+    if state.confirmed_gesture and is_valid_gesture:
+        # Get thumb and index finger tips for movement calculation
         thumb_tip = hand_landmarks.landmark[4]  # THUMB_TIP
+        index_tip = hand_landmarks.landmark[8]  # INDEX_FINGER_TIP
         
-        # Calculate center point between index and thumb tips (as a reference point)
-        current_x = (index_tip.x + thumb_tip.x) / 2 * image_width
-        current_y = (index_tip.y + thumb_tip.y) / 2 * image_height
+        # Calculate current position between thumb and index finger
+        current_center_x = (thumb_tip.x + index_tip.x) / 2 * image_width
+        current_center_y = (thumb_tip.y + index_tip.y) / 2 * image_height
         
-        # Draw the current position
-        cv2.circle(
-            image,
-            (int(current_x), int(current_y)),
-            5,
-            (0, 0, 255),  # Red color for current position
-            -1  # Filled circle
-        )
-        
-        # Draw the reference/starting position
-        if state.prev_x is not None and state.prev_y is not None:
-            # Draw reference point (starting position)
-            cv2.circle(
-                image,
-                (int(state.prev_x), int(state.prev_y)),
-                8,
-                (0, 255, 0),  # Green color for reference position
-                2  # Circle outline
-            )
+        # Draw fixed reference point (if exists)
+        if hasattr(state, 'reference_x') and hasattr(state, 'reference_y'):
+            cv2.circle(image, (int(state.reference_x), int(state.reference_y)), 15, (0, 255, 255), -1)  # Yellow filled circle
+            cv2.circle(image, (int(state.reference_x), int(state.reference_y)), 15, (0, 0, 0), 2)  # Black outline
             
-            # Draw a line connecting reference point and current point
-            cv2.line(
-                image,
-                (int(state.prev_x), int(state.prev_y)),
-                (int(current_x), int(current_y)),
-                (255, 255, 0),  # Yellow line
-                2
-            )
-            
-            # Calculate vertical distance from reference point
-            y_distance = current_y - state.prev_y
-            
-            # Display distance
             cv2.putText(
-                image,
-                f"Distance: {int(y_distance)}px",
-                (10, 350),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 0),
+                image, 
+                "REF", 
+                (int(state.reference_x) - 15, int(state.reference_y) + 5), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.5, 
+                (0, 0, 0), 
                 2
             )
-            
-            # Apply scrolling based on vertical movement
-            if state.cooldown_counter == 0:
-                # Calculate scroll amount, more movement = faster scrolling
-                scroll_amount = int(y_distance / 20)
-                
-                if abs(scroll_amount) > 0:
-                    # Perform scroll action
-                    mouse.scroll(0, -scroll_amount)
-                    
-                    # Display scrolling information
-                    direction = "DOWN" if scroll_amount > 0 else "UP"
-                    cv2.putText(
-                        image,
-                        f"Scrolling {direction}: {abs(scroll_amount)}",
-                        (10, 390),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 255),
-                        2
-                    )
-                    
-                    # Set a small cooldown to prevent too many scroll events
-                    state.cooldown_counter = max(1, int(0.02 * fps))
         
-        # Display active gesture status
+        # Draw current hand position
+        cv2.circle(image, (int(current_center_x), int(current_center_y)), 8, (0, 255, 0), -1)  # Green current position
+        
         cv2.putText(
             image, 
-            "Scroll Gesture Active", 
+            "Scroll Gesture Active - Move vertically from reference point", 
             (10, 310), 
             cv2.FONT_HERSHEY_SIMPLEX, 
             0.7, 
@@ -158,15 +106,77 @@ def process_scroll_gesture(image, hand_landmarks, fps, image_width, image_height
             2
         )
         
+        # Track movement for scrolling (only vertical, relative to reference point)
+        current_time = time.time()
+        if (hasattr(state, 'reference_y') and 
+            not (current_time - state.cooldown_start_time < state.cooldown_duration)):
+            
+            y_movement = state.reference_y - current_center_y
+            
+            # Display movement relative to reference
+            cv2.putText(
+                image, 
+                f"Y Move from ref: {y_movement:.1f}", 
+                (10, 350), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (255, 0, 0), 
+                2
+            )
+            
+            # Determine scroll direction and magnitude for vertical movement only
+            abs_y_movement = abs(y_movement)
+            
+            if abs_y_movement > state.movement_threshold:
+                # Calculate scroll intensity based on movement magnitude
+                scroll_intensity = max(1, min(5, int(abs_y_movement / 15)))
+                
+                if y_movement > 0:  # Upward movement from reference
+                    cv2.putText(
+                        image, 
+                        f"SCROLL UP (intensity: {scroll_intensity})", 
+                        (10, 390), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.9, 
+                        (0, 255, 0), 
+                        2
+                    )
+                    # Scroll up
+                    mouse.scroll(0, scroll_intensity)
+                    
+                    # Brief cooldown to prevent too rapid scrolling
+                    state.start_cooldown(max(0.05, 0.1 / scroll_intensity))
+                    
+                elif y_movement < 0:  # Downward movement from reference
+                    cv2.putText(
+                        image, 
+                        f"SCROLL DOWN (intensity: {scroll_intensity})", 
+                        (10, 390), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.9, 
+                        (0, 255, 0), 
+                        2
+                    )
+                    # Scroll down
+                    mouse.scroll(0, -scroll_intensity)
+                    
+                    # Brief cooldown to prevent too rapid scrolling
+                    state.start_cooldown(max(0.05, 0.1 / scroll_intensity))
+        
         state.gesture_active = True
         
-    # If gesture is not yet confirmed but is valid, increment confirmation counter
+    # If gesture is not yet confirmed but is valid, start or continue confirmation timer
     elif is_valid_gesture:
-        # Increment confirmation counter
-        state.gesture_confirmation_counter += 1
+        # Start confirmation timer if not started
+        if state.gesture_confirmation_start_time == 0:
+            state.start_gesture_confirmation()
+        
+        # Calculate confirmation progress
+        current_time = time.time()
+        elapsed_time = current_time - state.gesture_confirmation_start_time
+        confirmation_percent = min(100, int((elapsed_time / state.gesture_confirmation_time) * 100))
         
         # Display confirmation progress
-        confirmation_percent = min(100, int((state.gesture_confirmation_counter / confirmation_frames) * 100))
         cv2.putText(
             image, 
             f"Confirming scroll gesture: {confirmation_percent}%", 
@@ -178,28 +188,13 @@ def process_scroll_gesture(image, hand_landmarks, fps, image_width, image_height
         )
         
         # Check if gesture has been held long enough to confirm
-        if state.gesture_confirmation_counter >= confirmation_frames:
+        if state.is_gesture_confirmed():
             state.confirmed_gesture = True
-            
-            # Luôn đặt lại điểm tham chiếu khi xác nhận một cử chỉ mới
-            # Initialize reference position once gesture is confirmed
-            index_tip = hand_landmarks.landmark[8]  # INDEX_FINGER_TIP
+            # Set fixed reference point once gesture is confirmed
             thumb_tip = hand_landmarks.landmark[4]  # THUMB_TIP
-            reference_x = (index_tip.x + thumb_tip.x) / 2 * image_width
-            reference_y = (index_tip.y + thumb_tip.y) / 2 * image_height
-            
-            # Set the reference position that will be used to calculate scroll distance
-            state.prev_x = reference_x
-            state.prev_y = reference_y
-            
-            # Draw the reference point to show it's been set
-            cv2.circle(
-                image,
-                (int(reference_x), int(reference_y)),
-                8,
-                (0, 255, 0),  # Green color
-                -1  # Filled circle
-            )
+            index_tip = hand_landmarks.landmark[8]  # INDEX_FINGER_TIP
+            state.reference_x = (thumb_tip.x + index_tip.x) / 2 * image_width
+            state.reference_y = (thumb_tip.y + index_tip.y) / 2 * image_height
             
             cv2.putText(
                 image, 
@@ -211,15 +206,27 @@ def process_scroll_gesture(image, hand_landmarks, fps, image_width, image_height
                 2
             )
     else:
-        # Reset confirmation counter if gesture is not valid
-        state.gesture_confirmation_counter = 0
+        # Reset confirmation timer if gesture is not valid
+        state.gesture_confirmation_start_time = 0
+        
+        # If we were in the middle of an active gesture, start cooldown
+        if state.confirmed_gesture:
+            cv2.putText(
+                image, 
+                "Scroll gesture ended", 
+                (10, 310), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (0, 255, 255), 
+                2
+            )
+            
+            # Reset scroll state
+            state.reset()
+            
+            # Start gesture cooldown to prevent immediate re-triggering
+            state.start_gesture_cooldown()
     
     # Update state
     scroll_state = state
     return image
-
-def reset_scroll_orientation():
-    """Reset the scroll orientation to allow switching directions"""
-    global scroll_state
-    if scroll_state.confirmed_gesture:
-        scroll_state.scroll_orientation = None

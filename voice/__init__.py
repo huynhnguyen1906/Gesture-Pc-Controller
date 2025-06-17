@@ -11,6 +11,19 @@ from voice.transcriber import transcriber
 from voice.matcher import matcher
 from voice.commands import execute_command, get_all_commands
 
+# Export functions for gesture modules
+def record_voice_command():
+    """Record voice command using the recorder"""
+    return recorder.record_sync()
+
+def transcribe_audio(audio_data, sample_rate=16000):
+    """Transcribe audio data to text"""
+    return transcriber.transcribe_audio(audio_data, sample_rate)
+
+def match_command(text):
+    """Match transcribed text to commands"""
+    return matcher.match_command(text)
+
 # Voice control state
 voice_state = {
     'is_processing': False,
